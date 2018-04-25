@@ -92,13 +92,13 @@ object airline_Analysis extends App {
     totalCount
   }
 
-  def overallDelayPercentage(delayCount:Long,overAllCount:Long):Long={
-    val overAllDelayedPer: Long =(delayCount/overAllCount)*100
+  def overallDelayPercentage(delayCount:Long,overAllCount:Long):Double={
+    val overAllDelayedPer:Double =(delayCount*100)/overAllCount
     overAllDelayedPer
   }
 
-  def overallOnTimePercentage(onTimeCount:Long,overAllCount:Long): Long ={
-    val overAllOnTimePer: Long =(onTimeCount/overAllCount)*100
+  def overallOnTimePercentage(onTimeCount:Long,overAllCount:Long): Double ={
+    val overAllOnTimePer:Double =(onTimeCount*100)/overAllCount
     overAllOnTimePer
   }
 //  val df=read("C:\\Users\\hashmap\\Downloads\\airline_data\\train_df.csv")
@@ -107,7 +107,6 @@ object airline_Analysis extends App {
 //  val t=overallTotalCount(df)
 //  val s=overallDelayPercentage(x,t)
 //  val a=overallOnTimePercentage(y,t)
-//  println(s,a)
-
+//  println(x)
 }
 
