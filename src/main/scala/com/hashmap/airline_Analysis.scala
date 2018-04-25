@@ -5,6 +5,7 @@ import javax.annotation.Resource
 
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.functions.expr
 
 object airline_Analysis extends App {
   val spark: SparkSession =
@@ -59,16 +60,54 @@ object airline_Analysis extends App {
     df.createOrReplaceTempView("data")
     val byDOW=spark.sql("select DEP_DELAY,DAY_OF_WEEK from data where DEP_DELAY>0")
     val delayByWOD: DataFrame =byDOW.groupBy("DAY_OF_WEEK").count()
-    delayByWOD
+    delayByWOD.withColumnRenamed("count","delayedCount")
   }
 
   def onTimeByDayOfWeek(df:DataFrame):DataFrame={
     df.createOrReplaceTempView("data")
     val byDOW=spark.sql("select DEP_DELAY,DAY_OF_WEEK from data where DEP_DELAY=0")
     val onTimeByWOD: DataFrame =byDOW.groupBy("DAY_OF_WEEK").count()
-    onTimeByWOD
+    onTimeByWOD.withColumnRenamed("count","onTimeCount")
+  }
+
+  def totalCountByDOW(df:DataFrame):DataFrame={
+    df.createOrReplaceTempView("data")
+    val total: DataFrame =spark.sql("select DEP_DELAY,DAY_OF_WEEK from data")
+    val totalCount=total.groupBy("DAY_OF_WEEK").count
+    totalCount.withColumnRenamed("count","totalCountByDOW")
+  }
+
+  def delayPercentageCalculation(delay:DataFrame,onTime:DataFrame,total:DataFrame):DataFrame={
+    val delayTotalDF: DataFrame =delay.join(total, "DAY_OF_WEEK")
+    val joinedDF: DataFrame =delayTotalDF.join(onTime,"DAY_OF_WEEK")
+    val delayedPercentage: DataFrame =joinedDF.withColumn("DELAY_PER",expr("(delayedCount/totalCountByDOW)*100"))
+    val onTimePercentage: DataFrame =delayedPercentage.withColumn("ONTIME_PER",expr("(onTimeCount/totalCountByDOW)*100"))
+    val ratio=onTimePercentage.withColumn("Ratio",expr("(delayedCount/onTimeCount)"))
+    ratio
+  }
+
+  def overallTotalCount(df:DataFrame):Long={
+    df.createOrReplaceTempView("data")
+    val totalCount: Long =spark.sql("select DEP_DELAY from data").count()
+    totalCount
+  }
+
+  def overallDelayPercentage(delayCount:Long,overAllCount:Long):Long={
+    val overAllDelayedPer: Long =(delayCount/overAllCount)*100
+    overAllDelayedPer
+  }
+
+  def overallOnTimePercentage(onTimeCount:Long,overAllCount:Long): Long ={
+    val overAllOnTimePer: Long =(onTimeCount/overAllCount)*100
+    overAllOnTimePer
   }
 //  val df=read("C:\\Users\\hashmap\\Downloads\\airline_data\\train_df.csv")
-//  delayByDayOfWeek(df).show(10)
+//  val x=delayedCount(df)
+//  val y=onTimeCount(df)
+//  val t=overallTotalCount(df)
+//  val s=overallDelayPercentage(x,t)
+//  val a=overallOnTimePercentage(y,t)
+//  println(s,a)
+
 }
 
