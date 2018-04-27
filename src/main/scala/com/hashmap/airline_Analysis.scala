@@ -1,13 +1,11 @@
 package com.hashmap
 
-import java.io
-import javax.annotation.Resource
-
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame,SparkSession}
 import org.apache.spark.sql.functions.expr
+import org.apache.spark.sql.functions.bround
 
-object airline_Analysis extends App {
+object airline_Analysis{
+
   val spark: SparkSession =
     SparkSession
       .builder()
@@ -15,98 +13,79 @@ object airline_Analysis extends App {
       .config("spark.master", "local")
       .getOrCreate()
 
-  def read(resource: String): DataFrame = {
-
-    val schema = dfSchema
-    val dataFrame = spark.read.schema(schema).option("header", value = true).csv(resource)
-    dataFrame
+  def main(args: Array[String]): Unit = {
+    val filePath="C:\\Users\\hashmap\\Downloads\\airline_data\\train_df.csv"
+    val data=read(filePath)
+    val percentageDf=percentageCalculation(delayByDayOfWeek(data),onTimeByDayOfWeek(data))
   }
 
-
-  def dfSchema: StructType = {
-    val fields = Array(StructField("YEAR", IntegerType, nullable = true),
-      StructField("MONTH", IntegerType, nullable = true),
-      StructField("DAY_OF_MONTH", IntegerType, nullable = true),
-      StructField("DAY_OF_WEEK", IntegerType, nullable = true),
-      StructField("CARRIER", StringType, nullable = true),
-      StructField("FL_NUM", IntegerType, nullable = true),
-      StructField("ORIGIN", StringType, nullable = true),
-      StructField("DES", StringType, nullable = true),
-      StructField("DEP_TIME", IntegerType, nullable = true),
-      StructField("DEP_DELAY", IntegerType, nullable = true),
-      StructField("ARR_TIME", IntegerType, nullable = true),
-      StructField("ARR_DELAY", IntegerType, nullable = true),
-      StructField("CANCELLED", IntegerType, nullable = true),
-      StructField("CANCELLATION_CODE", IntegerType, nullable = true),
-      StructField("AIR_TIME", IntegerType, nullable = true),
-      StructField("DISTANCE", IntegerType, nullable = true))
-    val schema = StructType(fields)
-    schema
+  def read(filePath:String):DataFrame={
+    val df: DataFrame = spark.
+      read.
+      format("csv").
+      option("header", "true").
+      option("inferSchema","true").
+      load(filePath)
+    df
   }
 
   def delayedCount(df: DataFrame): Long = {
-    df.createOrReplaceTempView("data")
-    val delayed_data = spark.sql("select DEP_DELAY from data where (DEP_DELAY>0)")
-    delayed_data.count()
+    df
+      .select("ARR_DELAY")
+      .where("ARR_DELAY!='NA'")
+      .where("ARR_DELAY!=0")
+      .count()
   }
 
   def onTimeCount(df:DataFrame):Long={
-    df.createOrReplaceTempView("data")
-    val onTime_data: DataFrame =spark.sql("select DEP_DELAY from data where (DEP_DELAY==0)")
-    onTime_data.count()
+    df
+      .select("ARR_DELAY")
+      .where("ARR_DELAY!='NA'")
+      .where("ARR_DELAY=0")
+      .count()
   }
 
   def delayByDayOfWeek(df:DataFrame):DataFrame={
-    df.createOrReplaceTempView("data")
-    val byDOW=spark.sql("select DEP_DELAY,DAY_OF_WEEK from data where DEP_DELAY>0")
-    val delayByWOD: DataFrame =byDOW.groupBy("DAY_OF_WEEK").count()
-    delayByWOD.withColumnRenamed("count","delayedCount")
+    val delayByWOD=df
+      .select("ARR_DELAY","DAY_OF_WEEK")
+      .where("ARR_DELAY!='NA'")
+      .where("ARR_DELAY!=0")
+      .groupBy("DAY_OF_WEEK")
+      .count()
+      .withColumnRenamed("count","delayedCount")
+    delayByWOD
   }
 
   def onTimeByDayOfWeek(df:DataFrame):DataFrame={
-    df.createOrReplaceTempView("data")
-    val byDOW=spark.sql("select DEP_DELAY,DAY_OF_WEEK from data where DEP_DELAY=0")
-    val onTimeByWOD: DataFrame =byDOW.groupBy("DAY_OF_WEEK").count()
-    onTimeByWOD.withColumnRenamed("count","onTimeCount")
+    val onTimeByWOD=df
+      .select("ARR_DELAY","DAY_OF_WEEK")
+      .where("ARR_DELAY!='NA'")
+      .where("ARR_DELAY=0")
+      .groupBy("DAY_OF_WEEK")
+      .count()
+      .withColumnRenamed("count","onTimeCount")
+    onTimeByWOD
   }
 
-  def totalCountByDOW(df:DataFrame):DataFrame={
-    df.createOrReplaceTempView("data")
-    val total: DataFrame =spark.sql("select DEP_DELAY,DAY_OF_WEEK from data")
-    val totalCount=total.groupBy("DAY_OF_WEEK").count
-    totalCount.withColumnRenamed("count","totalCountByDOW")
+  def percentageCalculation(delayDF:DataFrame,onTimeDF:DataFrame):DataFrame={
+    val percentageDF=delayDF
+      .join(onTimeDF, "DAY_OF_WEEK")
+      .withColumn("totalCountByDOW",expr("delayedCount+onTimeCount"))
+      .withColumn("delay_PER",bround(expr("(delayedCount/totalCountByDOW)*100"),2))
+      .withColumn("onTime_PER",bround(expr("(onTimeCount/totalCountByDOW)*100"),2))
+      .withColumn("ratio",bround(expr("(delayedCount/onTimeCount)"),2))
+      .orderBy("DAY_OF_WEEK")
+    percentageDF
   }
 
-  def delayPercentageCalculation(delay:DataFrame,onTime:DataFrame,total:DataFrame):DataFrame={
-    val delayTotalDF: DataFrame =delay.join(total, "DAY_OF_WEEK")
-    val joinedDF: DataFrame =delayTotalDF.join(onTime,"DAY_OF_WEEK")
-    val delayedPercentage: DataFrame =joinedDF.withColumn("DELAY_PER",expr("(delayedCount/totalCountByDOW)*100"))
-    val onTimePercentage: DataFrame =delayedPercentage.withColumn("ONTIME_PER",expr("(onTimeCount/totalCountByDOW)*100"))
-    val ratio=onTimePercentage.withColumn("Ratio",expr("(delayedCount/onTimeCount)"))
-    ratio
+  def overAllDelayPercentage(delayCount:Long,onTimeCount:Long):Double={
+    val totalCount=delayCount+onTimeCount
+    (delayCount*100)/totalCount.toDouble
   }
 
-  def overallTotalCount(df:DataFrame):Long={
-    df.createOrReplaceTempView("data")
-    val totalCount: Long =spark.sql("select DEP_DELAY from data").count()
-    totalCount
+  def overAllOnTimePercentage(delayCount:Long,onTimeCount:Long): Double ={
+    val totalCount=delayCount+onTimeCount
+    (onTimeCount*100)/totalCount.toDouble
   }
-
-  def overallDelayPercentage(delayCount:Long,overAllCount:Long):Double={
-    val overAllDelayedPer:Double =(delayCount*100)/overAllCount
-    overAllDelayedPer
-  }
-
-  def overallOnTimePercentage(onTimeCount:Long,overAllCount:Long): Double ={
-    val overAllOnTimePer:Double =(onTimeCount*100)/overAllCount
-    overAllOnTimePer
-  }
-//  val df=read("C:\\Users\\hashmap\\Downloads\\airline_data\\train_df.csv")
-//  val x=delayedCount(df)
-//  val y=onTimeCount(df)
-//  val t=overallTotalCount(df)
-//  val s=overallDelayPercentage(x,t)
-//  val a=overallOnTimePercentage(y,t)
-//  println(x)
 }
 
