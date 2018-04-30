@@ -1,6 +1,6 @@
 package com.hashmap
 
-import org.apache.spark.sql.{DataFrame,SparkSession}
+import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.functions.bround
 
@@ -10,13 +10,18 @@ object airline_Analysis{
     SparkSession
       .builder()
       .appName("Airline Analysis")
-      .config("spark.master", "local")
+      .master("local")
+        .config("spark.sql.warehouse.dir","hdfs:///tmp/warehouse")
+      .enableHiveSupport()
       .getOrCreate()
 
+
   def main(args: Array[String]): Unit = {
-    val filePath="C:\\Users\\hashmap\\Downloads\\airline_data\\train_df.csv"
+    val filePath="hdfs:///tmp/test_df.csv"
     val data=read(filePath)
     val percentageDf=percentageCalculation(delayByDayOfWeek(data),onTimeByDayOfWeek(data))
+    percentageDf.write.format("orc").mode(SaveMode.Overwrite).saveAsTable("airline.analysis")
+    println("Table Added")
   }
 
   def read(filePath:String):DataFrame={
