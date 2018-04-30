@@ -11,16 +11,16 @@ object airline_Analysis{
       .builder()
       .appName("Airline Analysis")
       .master("local")
-        .config("spark.sql.warehouse.dir","hdfs:///tmp/warehouse")
+      .config("spark.sql.warehouse.dir","hdfs:///warehouse")
       .enableHiveSupport()
       .getOrCreate()
 
 
   def main(args: Array[String]): Unit = {
-    val filePath="hdfs:///tmp/test_df.csv"
+    val filePath="hdfs:///test_df.csv"
     val data=read(filePath)
     val percentageDf=percentageCalculation(delayByDayOfWeek(data),onTimeByDayOfWeek(data))
-    percentageDf.write.format("orc").mode(SaveMode.Overwrite).saveAsTable("airline.analysis")
+    percentageDf.write.format("hive").mode(SaveMode.Append).saveAsTable("airline.airline_analysis")
     println("Table Added")
   }
 
@@ -84,8 +84,8 @@ object airline_Analysis{
   }
 
   def overAllDelayPercentage(delayCount:Long,onTimeCount:Long):Double={
-    val totalCount=delayCount+onTimeCount
-    (delayCount*100)/totalCount.toDouble
+      val totalCount=delayCount+onTimeCount
+      (delayCount*100)/totalCount.toDouble
   }
 
   def overAllOnTimePercentage(delayCount:Long,onTimeCount:Long): Double ={
